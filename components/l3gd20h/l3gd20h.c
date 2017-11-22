@@ -405,20 +405,20 @@ bool l3gd20h_select_output_filter (l3gd20h_sensor_t* dev,
 }
 
 
-uint8_t l3gd20h_new_data (l3gd20h_sensor_t* dev)
+bool l3gd20h_new_data (l3gd20h_sensor_t* dev)
 {
-    if (!dev) return 0;
+    if (!dev) return false;
 
     dev->error_code = L3GD20H_OK;
 
-    uint8_t reg = 0;
+    uint8_t reg;
 
     if (dev->fifo_mode == l3gd20h_bypass)
     {
         if (!l3gd20h_read_reg (dev, L3GD20H_REG_STATUS, &reg, 1))
         {
             error_dev ("Could not get sensor status", __FUNCTION__, dev);
-            return 0;
+            return false;
         }
         return l3gd20h_get_reg_bit (reg, L3GD20H_ZYXDA);
     }
@@ -427,7 +427,7 @@ uint8_t l3gd20h_new_data (l3gd20h_sensor_t* dev)
         if (!l3gd20h_read_reg (dev, L3GD20H_REG_FIFO_SRC, &reg, 1))
         {
             error_dev ("Could not get fifo source register data", __FUNCTION__, dev);
-            return 0;
+            return false;
         }
         return l3gd20h_get_reg_bit (reg, L3GD20H_FIFO_FFS);
     }
@@ -458,6 +458,7 @@ bool l3gd20h_get_raw_data (l3gd20h_sensor_t* dev, l3gd20h_raw_data_t* raw)
     dev->error_code = L3GD20H_OK;
 
     uint8_t data[6];
+    uint8_t reg;
 
     if (!l3gd20h_read_reg (dev, L3GD20H_REG_OUT_X_L, data, 6))
     {
@@ -465,10 +466,25 @@ bool l3gd20h_get_raw_data (l3gd20h_sensor_t* dev, l3gd20h_raw_data_t* raw)
         dev->error_code |= L3GD20H_GET_RAW_DATA_FAILED;
         return false;
     }
-        
+
     raw->x = lsb_msb_to_type ( int16_t, data, 0);
     raw->y = lsb_msb_to_type ( int16_t, data, 2);
     raw->z = lsb_msb_to_type ( int16_t, data, 4);
+    
+    if (dev->fifo_mode != l3gd20h_bypass)
+    {
+        if (!l3gd20h_read_reg (dev, L3GD20H_REG_FIFO_SRC, &reg, 1))
+            return false;
+            
+        // in FIFO mode test whether it was last sample
+        if (l3gd20h_get_reg_bit (reg, L3GD20H_FIFO_FFS))
+            return true;
+        
+        // if so, clean FIFO
+        if (!l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_MODE, l3gd20h_bypass) ||
+            !l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_MODE, dev->fifo_mode))
+            return false;
+    }
     
     return true;
 }
@@ -488,7 +504,7 @@ uint8_t l3gd20h_get_raw_data_fifo (l3gd20h_sensor_t* dev, l3gd20h_raw_data_fifo_
         return 0;
     }
 
-    uint8_t level = l3gd20h_get_reg_bit (reg, L3GD20H_FIFO_FFS);
+    uint8_t level = l3gd20h_get_reg_bit (reg, L3GD20H_FIFO_FFS) + (reg & L3GD20H_FIFO_OVR ? 1 : 0);
 
     for (int i = 0; i < level; i++)
         if (!l3gd20h_get_raw_data(dev, raw+i))
@@ -497,6 +513,11 @@ uint8_t l3gd20h_get_raw_data_fifo (l3gd20h_sensor_t* dev, l3gd20h_raw_data_fifo_
             dev->error_code |= L3GD20H_GET_RAW_DATA_FIFO_FAILED;
             return 0;
         }
+
+    // clean FIFO (see app note)
+    if (!l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_MODE, l3gd20h_bypass) ||
+        !l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_MODE, dev->fifo_mode))
+        return 0;
     
     return level;
 }

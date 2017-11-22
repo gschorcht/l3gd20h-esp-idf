@@ -43,7 +43,7 @@
 
 // Uncomment one of the following defines to enable debug output
 // #define L3GD20H_DEBUG_LEVEL_1    // only error messages
-#define L3GD20H_DEBUG_LEVEL_2    // debug and error messages
+// #define L3GD20H_DEBUG_LEVEL_2    // debug and error messages
 
 // L3GD20H addresses
 #define L3GD20H_I2C_ADDRESS_1           0x6a  // SDO pin is low
@@ -180,13 +180,10 @@ bool l3gd20h_select_output_filter (l3gd20h_sensor_t* dev,
 /**
  * @brief	Test whether new sets of data are available
  *
- * In the bypass mode it returns 1 if new data are available. In any FIFO
- * mode, however, it returns the number of data sets waiting in the FIFO.
- *
  * @param   dev     pointer to the sensor device data structure
- * @return          number of sets of data available (max. 32) or 0.
+ * @return          true on new data, otherwise false
  */
-uint8_t l3gd20h_new_data (l3gd20h_sensor_t* dev);
+bool l3gd20h_new_data (l3gd20h_sensor_t* dev);
 
 
 /**
@@ -236,7 +233,7 @@ bool l3gd20h_get_raw_data (l3gd20h_sensor_t* dev,
  * In bypass mode, it returns exactly one raw data set.
  *
  * @param   dev     pointer to the sensor device data structure
- * @param   raw     arry of 32 raw data structures
+ * @param   raw     array of 32 raw data structures
  * @return          number of data sets read from fifo on success or 0 on error
  */
 uint8_t l3gd20h_get_raw_data_fifo (l3gd20h_sensor_t* dev,
