@@ -323,13 +323,36 @@ bool l3gd20h_config_int_signals (l3gd20h_sensor_t* dev,
  *
  * @param   dev      pointer to the sensor device data structure
  * @param   mode     high pass filter mode
- * @param   f_cutoff cutoff frequency (depends on output data rate) [0 ... 15]
- * @param   ref      reference in HPF reference mode, not used in other modes
+ * @param   cutoff   cutoff frequency (depends on output data rate) [0 ... 15]
  * @return           true on success, false on error
  */
 bool l3gd20h_config_hpf (l3gd20h_sensor_t* dev, 
-                         l3gd20h_hpf_mode_t mode, 
-                         uint8_t f_cutoff, uint8_t ref);
+                         l3gd20h_hpf_mode_t mode, uint8_t cutoff);
+
+
+/**
+ * @brief   Set HPF (high pass filter) reference
+ *
+ * Used to set the reference of HPF in reference mode *l3gd20h_hpf_reference*.
+ * Used to reset the HPF in autoreset mode *l3gd20h_hpf_autoreset*. 
+ * Reference is given as two's complement.
+ *
+ * @param   dev      pointer to the sensor device data structure
+ * @param   ref      reference *l3gd20h_hpf_reference* mode, otherwise ignored
+ * @return           true on success, false on error
+ */
+bool l3gd20h_set_hpf_ref (l3gd20h_sensor_t* dev, int8_t ref);
+
+
+/**
+ * @brief   Get HPF (high pass filter) reference
+ *
+ * Used to reset the HPF in normal mode *l3gd20h_hpf_normal*.
+ *
+ * @param   dev      pointer to the sensor device data structure
+ * @return           HPF reference as two's complement
+ */
+int8_t l3gd20h_get_hpf_ref (l3gd20h_sensor_t* dev);
 
 
 /**

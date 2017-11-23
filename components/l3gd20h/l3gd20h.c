@@ -186,11 +186,6 @@
 #define L3GD20H_SW_RESET          0x04    // L3GD20H_REG_LOW_ODR<2>
 #define L3GD20H_LOW_ODR           0x01    // L3GD20H_REG_LOW_ODR<0>
 
-// scale factors for conversion of raw sensor data to degree for possible
-// sensitivities according to mechanical characteristics in datasheet
-const static float L3GD20H_SCALES[3] = { (0.00875F), (0.0175F), (0.070F) };
-
-
 /** Forward declaration of functions for internal use */
 
 static bool    l3gd20h_reset       (l3gd20h_sensor_t* dev);
@@ -433,6 +428,10 @@ bool l3gd20h_new_data (l3gd20h_sensor_t* dev)
     }
 }
 
+// scale factors for conversion of raw sensor data to degree for possible
+// sensitivities according to mechanical characteristics in datasheet
+const static float L3GD20H_SCALES[3] = { (0.00875F), (0.0175F), (0.070F) };
+
 
 bool l3gd20h_get_float_data (l3gd20h_sensor_t* dev, l3gd20h_float_data_t* data)
 {
@@ -450,6 +449,24 @@ bool l3gd20h_get_float_data (l3gd20h_sensor_t* dev, l3gd20h_float_data_t* data)
     return true;
 }
 
+
+uint8_t l3gd20h_get_float_data_fifo (l3gd20h_sensor_t* dev, l3gd20h_float_data_fifo_t data)
+{
+    if (!dev) return 0;
+
+    l3gd20h_raw_data_fifo_t raw;
+    
+    uint8_t num = l3gd20h_get_raw_data_fifo (dev, raw);
+    
+    for (int i = 0; i < num; i++)
+    {
+        data[i].x = raw[i].x * L3GD20H_SCALES[dev->scale];
+        data[i].y = raw[i].y * L3GD20H_SCALES[dev->scale];
+        data[i].z = raw[i].z * L3GD20H_SCALES[dev->scale];
+    }
+
+    return num;
+}
 
 bool l3gd20h_get_raw_data (l3gd20h_sensor_t* dev, l3gd20h_raw_data_t* raw)
 {
@@ -743,7 +760,7 @@ bool l3gd20h_config_int_signals (l3gd20h_sensor_t* dev,
 
 
 bool l3gd20h_config_hpf (l3gd20h_sensor_t* dev, l3gd20h_hpf_mode_t mode, 
-                         uint8_t f_cutoff, uint8_t ref)
+                         uint8_t cutoff)
 {
     if (!dev) return false;
 
@@ -752,8 +769,7 @@ bool l3gd20h_config_hpf (l3gd20h_sensor_t* dev, l3gd20h_hpf_mode_t mode,
     uint8_t reg = 0;
     
     if (!l3gd20h_update_reg (dev, L3GD20H_REG_CTRL2, L3GD20H_HPF_MODE, mode) ||
-        !l3gd20h_update_reg (dev, L3GD20H_REG_CTRL2, L3GD20H_HPF_CUTOFF, f_cutoff) ||
-        !l3gd20h_write_reg (dev, L3GD20H_REG_REFERENCE, mode == l3gd20h_reference ? &ref : &reg, 1))
+        !l3gd20h_update_reg (dev, L3GD20H_REG_CTRL2, L3GD20H_HPF_CUTOFF, cutoff))
     {   
         error_dev ("Could not configure high pass filter", __FUNCTION__, dev);
         dev->error_code |= L3GD20H_CONFIG_HPF_FAILED;
@@ -761,6 +777,41 @@ bool l3gd20h_config_hpf (l3gd20h_sensor_t* dev, l3gd20h_hpf_mode_t mode,
     }
 
     return true;
+}
+
+
+bool l3gd20h_set_hpf_ref (l3gd20h_sensor_t* dev, int8_t ref)
+{
+    if (!dev) return false;
+
+    dev->error_code = L3GD20H_OK;
+
+    if (!l3gd20h_write_reg (dev, L3GD20H_REG_REFERENCE, (uint8_t*)&ref, 1))
+    {   
+        error_dev ("Could not set high pass filter reference", __FUNCTION__, dev);
+        dev->error_code |= L3GD20H_CONFIG_HPF_FAILED;
+        return false;
+    }
+
+    return true;
+}
+
+int8_t l3gd20h_get_hpf_ref (l3gd20h_sensor_t* dev)
+{
+    if (!dev) return 0;
+
+    dev->error_code = L3GD20H_OK;
+
+    int8_t ref = 0;
+    
+    if (!l3gd20h_read_reg (dev, L3GD20H_REG_REFERENCE, (uint8_t*)&ref, 1))
+    {   
+        error_dev ("Could not get high pass filter reference", __FUNCTION__, dev);
+        dev->error_code |= L3GD20H_CONFIG_HPF_FAILED;
+        return 0;
+    }
+
+    return ref;
 }
 
 
