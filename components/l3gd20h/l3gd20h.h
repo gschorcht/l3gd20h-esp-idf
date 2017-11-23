@@ -241,10 +241,12 @@ uint8_t l3gd20h_get_raw_data_fifo (l3gd20h_sensor_t* dev,
                                    
 
 /**
- * @brief   Set cofiguration for interrupt signal INT1 (axis movement wake up)
+ * @brief   Enable or disable interrupt signal INT1 (axis movement wake up)
  *
  * Set the configuration for interrupts that are generated when a certain
- * angular rate is higher or lower than defined thresholds.
+ * angular rate is higher or lower than defined thresholds. It enables the
+ * the interrupt if any interrupt source in the configuration is enabled and
+ * disables the interrupt in the case that all interrupt sources are disabled.
  *
  * @param   dev      pointer to the sensor device data structure
  * @param   config   INT1 configuration
@@ -255,7 +257,7 @@ bool l3gd20h_set_int1_config (l3gd20h_sensor_t* dev,
 
 
 /**
- * @brief   Get cofiguration for interrupt signal INT1 (axis movement wake up)
+ * @brief   Get configuration for interrupt signal INT1
  *
  * Get the configuration for interrupts that are generated when a certain
  * angular rate is higher or lower than defined thresholds.

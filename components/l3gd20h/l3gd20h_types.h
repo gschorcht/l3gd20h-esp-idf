@@ -167,7 +167,7 @@ typedef enum {
     l3gd20h_data_ready,     // interrupt when data are ready to read
     l3gd20h_fifo_threshold, // interrupt when FIFO filling >= FTH level
     l3gd20h_fifo_overrun,   // interrupt when FIFO is completely filled
-    l3gd20h_fifo_empty      // interrupt when FIFO is empty
+    l3gd20h_fifo_empty      // interrupt when FIFO becomes empty
 
 } l3gd20h_int2_types_t;
 

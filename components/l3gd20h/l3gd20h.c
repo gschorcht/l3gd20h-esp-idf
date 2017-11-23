@@ -183,6 +183,7 @@
 #define L3GD20H_INT1_WAIT         0x80    // L3GD20H_REG_IG_DURATION<7>
 #define L3GD20H_INT1_DURATION     0x3f    // L3GD20H_REG_IG_DURATION<6:0>
 
+#define L3GD20H_DRDY_HL           0x20    // L3GD20H_REG_LOW_ODR<5>
 #define L3GD20H_SW_RESET          0x04    // L3GD20H_REG_LOW_ODR<2>
 #define L3GD20H_LOW_ODR           0x01    // L3GD20H_REG_LOW_ODR<0>
 
@@ -748,7 +749,8 @@ bool l3gd20h_config_int_signals (l3gd20h_sensor_t* dev,
     dev->error_code = L3GD20H_OK;
 
     if (!l3gd20h_update_reg (dev, L3GD20H_REG_CTRL3, L3GD20H_HL_ACTIVE, level) ||
-        !l3gd20h_update_reg (dev, L3GD20H_REG_CTRL3, L3GD20H_PP_OD, type))
+        !l3gd20h_update_reg (dev, L3GD20H_REG_CTRL3, L3GD20H_PP_OD, type) ||
+        !l3gd20h_update_reg (dev, L3GD20H_REG_LOW_ODR, L3GD20H_DRDY_HL, level))
     {   
         error_dev ("Could not configure interrupt signals", __FUNCTION__, dev);
         dev->error_code |= L3GD20H_CONFIG_INT_SIGNALS_FAILED;
@@ -766,8 +768,6 @@ bool l3gd20h_config_hpf (l3gd20h_sensor_t* dev, l3gd20h_hpf_mode_t mode,
 
     dev->error_code = L3GD20H_OK;
 
-    uint8_t reg = 0;
-    
     if (!l3gd20h_update_reg (dev, L3GD20H_REG_CTRL2, L3GD20H_HPF_MODE, mode) ||
         !l3gd20h_update_reg (dev, L3GD20H_REG_CTRL2, L3GD20H_HPF_CUTOFF, cutoff))
     {   
