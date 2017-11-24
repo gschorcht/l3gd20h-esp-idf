@@ -2,7 +2,10 @@
  * Driver for L3GD20H 3-axes digital output gyroscope connected to I2C or SPI.
  * It can also be used with L3GD20 and L3G4200D.
  *
- * Part of esp-open-rtos [https://github.com/SuperHouse/esp-open-rtos]
+ * This driver is for the usage with the ESP8266 and FreeRTOS (esp-open-rtos)
+ * [https://github.com/SuperHouse/esp-open-rtos]. It is also working with ESP32
+ * and ESP-IDF [https://github.com/espressif/esp-idf.git] as well as Linux
+ * based systems using a wrapper library for ESP8266 functions.
  *
  * ---------------------------------------------------------------------------
  *
@@ -1041,7 +1044,7 @@ static bool l3gd20h_spi_write(l3gd20h_sensor_t* dev, uint8_t reg, uint8_t *data,
 }
 
 
-#define I2C_AUTO_INCREMENT	(0x80)
+#define I2C_AUTO_INCREMENT    (0x80)
 
 static bool l3gd20h_i2c_read(l3gd20h_sensor_t* dev, uint8_t reg, uint8_t *data, uint16_t len)
 {
@@ -1080,6 +1083,9 @@ static bool l3gd20h_i2c_write(l3gd20h_sensor_t* dev, uint8_t reg, uint8_t *data,
 
     debug_dev ("Write %d byte to i2c slave register %02x.", __FUNCTION__, dev, len, reg);
 
+    if (len > 1)
+        reg |= I2C_AUTO_INCREMENT;
+    
     int result = i2c_slave_write(dev->bus, dev->addr, &reg, data, len);
 
     if (result)

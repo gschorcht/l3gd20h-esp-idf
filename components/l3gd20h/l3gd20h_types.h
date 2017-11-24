@@ -1,7 +1,11 @@
 /**
  * Driver for L3GD20H 3-axes digital output gyroscope connected to I2C or SPI.
+ * It can also be used with L3GD20 and L3G4200D.
  *
- * Part of esp-open-rtos [https://github.com/SuperHouse/esp-open-rtos]
+ * This driver is for the usage with the ESP8266 and FreeRTOS (esp-open-rtos)
+ * [https://github.com/SuperHouse/esp-open-rtos]. It is also working with ESP32
+ * and ESP-IDF [https://github.com/espressif/esp-idf.git] as well as Linux
+ * based systems using a wrapper library for ESP8266 functions.
  *
  * ---------------------------------------------------------------------------
  *
@@ -190,8 +194,8 @@ typedef struct {
  */
 typedef enum {
 
-    l3gd20h_low_active,
-    l3gd20h_high_active
+    l3gd20h_high_active = 0,
+    l3gd20h_low_active
 
 } l3gd20h_signal_level_t;
     
@@ -257,7 +261,7 @@ typedef enum {
 
 
 /**
- * @brief 	L3GD20H sensor device data structure type
+ * @brief   L3GD20H sensor device data structure type
  */
 typedef struct {
 
