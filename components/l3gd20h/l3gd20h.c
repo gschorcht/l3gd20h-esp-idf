@@ -141,8 +141,8 @@
 #define L3GD20H_Y_ENABLED         0x02    // L3GD20H_REG_CTRL1<1>
 #define L3GD20H_X_ENABLED         0x01    // L3GD20H_REG_CTRL1<0>
 
-#define L3GD20H_HPF_MODE          0x30    // L3GD20H_REG_CTRL3<5:4>
-#define L3GD20H_HPF_CUTOFF        0x0f    // L3GD20H_REG_CTRL3<3:0>
+#define L3GD20H_HPF_MODE          0x30    // L3GD20H_REG_CTRL2<5:4>
+#define L3GD20H_HPF_CUTOFF        0x0f    // L3GD20H_REG_CTRL2<3:0>
 
 #define L3GD20H_INT1_IG           0x80    // L3GD20H_REG_CTRL3<7>
 #define L3GD20H_INT1_BOOT         0x40    // L3GD20H_REG_CTRL3<6>
@@ -365,7 +365,8 @@ bool l3gd20h_set_scale (l3gd20h_sensor_t* dev, l3gd20h_scale_t scale)
 }
 
 
-bool l3gd20h_set_fifo_mode (l3gd20h_sensor_t* dev, l3gd20h_fifo_mode_t mode)
+bool l3gd20h_set_fifo_mode (l3gd20h_sensor_t* dev, l3gd20h_fifo_mode_t mode,
+                            uint8_t thresh)
 {
     if (!dev) return false;
     
@@ -377,7 +378,8 @@ bool l3gd20h_set_fifo_mode (l3gd20h_sensor_t* dev, l3gd20h_fifo_mode_t mode)
         return false;
 
     // read FIFO_CTRL register and write FIFO mode
-    if (!l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_MODE, mode))
+    if (!l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_THRESH, thresh) ||
+        !l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_MODE, mode))
         return false;
 
     return true;
@@ -391,9 +393,11 @@ bool l3gd20h_select_output_filter (l3gd20h_sensor_t* dev,
 
     dev->error_code = L3GD20H_OK;
 
-    if (!l3gd20h_update_reg (dev, L3GD20H_REG_CTRL5, L3GD20H_OUT_SEL, filter) ||
+    if (// try to set the register OUT_SEL in any case
+        !l3gd20h_update_reg (dev, L3GD20H_REG_CTRL5, L3GD20H_OUT_SEL, filter) ||
+        // try to set HPen in case LPF2 and HPF is used
         (filter == l3gd20h_hpf_and_lpf2 &&
-        !l3gd20h_update_reg (dev, L3GD20H_REG_CTRL5, L3GD20H_HP_ENABLED, 1)))
+         !l3gd20h_update_reg (dev, L3GD20H_REG_CTRL5, L3GD20H_HP_ENABLED, 1)))
     {   
         error_dev ("Could not select filters for output data", __FUNCTION__, dev);
         dev->error_code |= L3GD20H_SEL_OUT_FILTER_FAILED;
@@ -472,44 +476,32 @@ uint8_t l3gd20h_get_float_data_fifo (l3gd20h_sensor_t* dev, l3gd20h_float_data_f
     return num;
 }
 
+
 bool l3gd20h_get_raw_data (l3gd20h_sensor_t* dev, l3gd20h_raw_data_t* raw)
 {
     if (!dev || !raw) return false;
 
     dev->error_code = L3GD20H_OK;
 
-    uint8_t data[6];
-    uint8_t reg;
+    // abort if not in bypass mode
+    if (dev->fifo_mode != l3gd20h_bypass)
+    {
+        dev->error_code = L3GD20H_SENSOR_IN_BYPASS_MODE;
+        error_dev ("Sensor is in FIFO mode, use l3gd20h_get_*_data_fifo to get data",
+                   __FUNCTION__, dev);
+        return false;
+    }
 
-    if (!l3gd20h_read_reg (dev, L3GD20H_REG_OUT_X_L, data, 6))
+    // read raw data sample
+    if (!l3gd20h_read_reg (dev, L3GD20H_REG_OUT_X_L, (uint8_t*)raw, 6))
     {
         error_dev ("Could not get raw data", __FUNCTION__, dev);
         dev->error_code |= L3GD20H_GET_RAW_DATA_FAILED;
         return false;
     }
 
-    raw->x = lsb_msb_to_type ( int16_t, data, 0);
-    raw->y = lsb_msb_to_type ( int16_t, data, 2);
-    raw->z = lsb_msb_to_type ( int16_t, data, 4);
-    
-    if (dev->fifo_mode != l3gd20h_bypass)
-    {
-        if (!l3gd20h_read_reg (dev, L3GD20H_REG_FIFO_SRC, &reg, 1))
-            return false;
-            
-        // in FIFO mode test whether it was last sample
-        if (l3gd20h_get_reg_bit (reg, L3GD20H_FIFO_FFS))
-            return true;
-        
-        // if so, clean FIFO
-        if (!l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_MODE, l3gd20h_bypass) ||
-            !l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_MODE, dev->fifo_mode))
-            return false;
-    }
-    
     return true;
 }
-
 
 uint8_t l3gd20h_get_raw_data_fifo (l3gd20h_sensor_t* dev, l3gd20h_raw_data_fifo_t raw)
 {
@@ -517,31 +509,55 @@ uint8_t l3gd20h_get_raw_data_fifo (l3gd20h_sensor_t* dev, l3gd20h_raw_data_fifo_
 
     dev->error_code = L3GD20H_OK;
 
+    // in bypass mode, use lis3dh_get_raw_data to return one sample
+    if (dev->fifo_mode == l3gd20h_bypass)
+        return l3gd20h_get_raw_data (dev, raw) ? 1 : 0;
+
     uint8_t reg;
 
+    // read FIFO state
     if (!l3gd20h_read_reg (dev, L3GD20H_REG_FIFO_SRC, &reg, 1))
     {
         error_dev ("Could not get fifo source register data", __FUNCTION__, dev);
         return 0;
     }
 
-    uint8_t level = l3gd20h_get_reg_bit (reg, L3GD20H_FIFO_FFS) + (reg & L3GD20H_FIFO_OVR ? 1 : 0);
+    // if nothing is in the FIFO, just return with 0
+    if (reg & L3GD20H_FIFO_EMPTY)
+        return 0;
 
-    for (int i = 0; i < level; i++)
-        if (!l3gd20h_get_raw_data(dev, raw+i))
+    // read samples from FIFO
+    uint8_t samples = (reg & L3GD20H_FIFO_FFS) + (reg & L3GD20H_FIFO_OVR ? 1 : 0);
+
+    // read samples from FIFO
+    for (int i = 0; i < samples; i++)
+        if (!l3gd20h_read_reg (dev, L3GD20H_REG_OUT_X_L, (uint8_t*)&raw[i], 6))
         {
             error_dev ("Could not get raw data", __FUNCTION__, dev);
             dev->error_code |= L3GD20H_GET_RAW_DATA_FIFO_FAILED;
-            return 0;
+            return i;
         }
 
-    // clean FIFO (see app note)
-    if (!l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_MODE, l3gd20h_bypass) ||
-        !l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_MODE, dev->fifo_mode))
+    l3gd20h_read_reg (dev, L3GD20H_REG_FIFO_SRC, &reg, 1);
+
+    if (reg & L3GD20H_FIFO_FFS)
+    {
+        dev->error_code = LG3GD20H_ODR_TOO_HIGH;
+        error_dev ("New samples stored in FIFO while reading, "
+                   "output data rate (ODR) too high", __FUNCTION__, dev);
         return 0;
-    
-    return level;
+    }
+
+    if (dev->fifo_mode == l3gd20h_fifo && samples == 32)
+    {
+        // clean FIFO (see app note)
+        l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_MODE, l3gd20h_bypass);
+        l3gd20h_update_reg (dev, L3GD20H_REG_FIFO_CTRL, L3GD20H_FIFO_MODE, l3gd20h_fifo);
+    }
+
+    return samples;
 }
+
 
 bool l3gd20h_set_int1_config (l3gd20h_sensor_t* dev, 
                               l3gd20h_int1_config_t* config)
@@ -563,10 +579,10 @@ bool l3gd20h_set_int1_config (l3gd20h_sensor_t* dev,
     l3gd20h_set_reg_bit (&ig_cfg, L3GD20H_INT1_Z_LOW , config->z_low_enabled);
     l3gd20h_set_reg_bit (&ig_cfg, L3GD20H_INT1_Z_HIGH, config->z_high_enabled);
     
-    l3gd20h_set_reg_bit (&ig_cfg, L3GD20H_INT1_LATCH , config->latch_interrupt);
-    l3gd20h_set_reg_bit (&ig_cfg, L3GD20H_INT1_AND_OR, config->and_combination);
+    l3gd20h_set_reg_bit (&ig_cfg, L3GD20H_INT1_LATCH , config->latch);
+    l3gd20h_set_reg_bit (&ig_cfg, L3GD20H_INT1_AND_OR, config->and_or);
 
-    l3gd20h_set_reg_bit (&ig_dur, L3GD20H_INT1_WAIT    , config->wait_enabled);
+    l3gd20h_set_reg_bit (&ig_dur, L3GD20H_INT1_WAIT    , config->wait);
     l3gd20h_set_reg_bit (&ig_dur, L3GD20H_INT1_DURATION, config->duration);
 
     ig_ths[0] = (config->x_threshold >> 8) & 0x7f;
@@ -576,10 +592,7 @@ bool l3gd20h_set_int1_config (l3gd20h_sensor_t* dev,
     ig_ths[4] = (config->z_threshold >> 8) & 0x7f;
     ig_ths[5] = (config->z_threshold & 0xff);
 
-    if (// ouput value selection used for threshold comparison for INT1 generation
-        !l3gd20h_update_reg (dev, L3GD20H_REG_CTRL5, L3GD20H_IG_SEL, config->filter) ||
-
-        // write the thresholds to registers IG_THS_*
+    if (// write the thresholds to registers IG_THS_*
         !l3gd20h_write_reg (dev, L3GD20H_REG_IG_THS_XH, ig_ths, 6) ||
         
         // write duration configuration to IG_DURATION 
@@ -596,8 +609,13 @@ bool l3gd20h_set_int1_config (l3gd20h_sensor_t* dev,
         return false;
     }
 
-    if (config->filter == l3gd20h_hpf_and_lpf2 &&
-        !l3gd20h_update_reg (dev, L3GD20H_REG_CTRL5, L3GD20H_HP_ENABLED, 1))
+
+    if (// ouput value selection used for threshold comparison for INT1 generation
+        !l3gd20h_update_reg (dev, L3GD20H_REG_CTRL5, L3GD20H_IG_SEL, config->filter) ||
+
+        // try to set HPen in case LPF2 and HPF is used
+        (config->filter == l3gd20h_hpf_and_lpf2 &&
+         !l3gd20h_update_reg (dev, L3GD20H_REG_CTRL5, L3GD20H_HP_ENABLED, 1)))
     {   
         error_dev ("Could not configure interrupt INT1", __FUNCTION__, dev);
         dev->error_code |= L3GD20H_CONFIG_INT1_FAILED;
@@ -627,8 +645,9 @@ bool l3gd20h_get_int1_config (l3gd20h_sensor_t* dev,
         !l3gd20h_read_reg (dev, L3GD20H_REG_CTRL3, &ctrl3, 1) ||
         !l3gd20h_read_reg (dev, L3GD20H_REG_CTRL5, &ctrl5, 1))
     {   
-        error_dev ("Could not read configuration for interrupt INT1 from sensor", __FUNCTION__, dev);
         dev->error_code |= L3GD20H_CONFIG_INT1_FAILED;
+        error_dev ("Could not read configuration for interrupt INT1 from sensor",
+                   __FUNCTION__, dev);
         return false;
     }
     
@@ -647,10 +666,10 @@ bool l3gd20h_get_int1_config (l3gd20h_sensor_t* dev,
     
     config->filter          = l3gd20h_get_reg_bit (ctrl5, L3GD20H_IG_SEL);
     
-    config->and_combination = l3gd20h_get_reg_bit (ig_cfg, L3GD20H_INT1_AND_OR);
-    config->latch_interrupt = l3gd20h_get_reg_bit (ig_cfg, L3GD20H_INT1_LATCH);
+    config->and_or          = l3gd20h_get_reg_bit (ig_cfg, L3GD20H_INT1_AND_OR);
+    config->latch           = l3gd20h_get_reg_bit (ig_cfg, L3GD20H_INT1_LATCH);
     
-    config->wait_enabled    = l3gd20h_get_reg_bit (ig_dur, L3GD20H_INT1_WAIT);
+    config->wait            = l3gd20h_get_reg_bit (ig_dur, L3GD20H_INT1_WAIT);
     config->duration        = l3gd20h_get_reg_bit (ig_dur, L3GD20H_INT1_DURATION);
     
     config->counter_mode    = 0;
@@ -665,22 +684,24 @@ bool l3gd20h_get_int1_source (l3gd20h_sensor_t* dev, l3gd20h_int1_source_t* sour
 
     dev->error_code = L3GD20H_OK;
 
-    uint8_t ig_src;
+    l3gd20h_int1_source_t ig_cfg;
+    l3gd20h_int1_source_t ig_src;
 
-    if (!l3gd20h_read_reg (dev, L3GD20H_REG_IG_SRC, &ig_src, 1))
+    if (!l3gd20h_read_reg (dev, L3GD20H_REG_IG_CFG, (uint8_t*)&ig_cfg, 1) ||
+        !l3gd20h_read_reg (dev, L3GD20H_REG_IG_SRC, (uint8_t*)&ig_src, 1))
     {   
         error_dev ("Could not read source of interrupt INT1 from sensor", __FUNCTION__, dev);
         dev->error_code |= L3GD20H_INT1_SOURCE_FAILED;
         return false;
     }
 
-    source->active = l3gd20h_get_reg_bit (ig_src, L3GD20H_INT1_ACTIVE);
-    source->x_low  = l3gd20h_get_reg_bit (ig_src, L3GD20H_INT1_X_LOW);
-    source->x_high = l3gd20h_get_reg_bit (ig_src, L3GD20H_INT1_X_HIGH);
-    source->y_low  = l3gd20h_get_reg_bit (ig_src, L3GD20H_INT1_Y_LOW);
-    source->y_high = l3gd20h_get_reg_bit (ig_src, L3GD20H_INT1_Y_HIGH);
-    source->z_low  = l3gd20h_get_reg_bit (ig_src, L3GD20H_INT1_Z_LOW);
-    source->z_high = l3gd20h_get_reg_bit (ig_src, L3GD20H_INT1_Z_HIGH);
+    source->active = ig_src.active;
+    source->x_low  = ig_src.x_low  & ig_cfg.x_low;
+    source->x_high = ig_src.x_high & ig_cfg.x_high;
+    source->y_low  = ig_src.y_low  & ig_cfg.y_low;
+    source->y_high = ig_src.y_high & ig_cfg.y_high;
+    source->z_low  = ig_src.z_low  & ig_cfg.z_low;
+    source->z_high = ig_src.z_high & ig_cfg.z_high;
     
     return true;
 }

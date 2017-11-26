@@ -97,8 +97,8 @@ typedef enum {
  */
 typedef enum {
     l3gd20h_no_filter = 0,    // HPF not used, LPF2 not used
-    l3gd20h_only_hpf,         // HPF used, LPF2 not used
-    l3gd20h_only_lpf2,        // HPF not used, LPF2 used
+    l3gd20h_hpf_only,         // HPF used, LPF2 not used
+    l3gd20h_lpf2_only,        // HPF not used, LPF2 used
     l3gd20h_hpf_and_lpf2      // HPF used, LPF2 used
 } l3gd20h_filter_t;
 
@@ -124,18 +124,17 @@ typedef struct {
 
     l3gd20h_filter_t filter;  // HPF and LPF2 mode used for threshold comparison
 
-    bool     and_combination; // interrupt combination true - AND, false - OR
+    bool     and_or;          // interrupt combination true - AND, false - OR
                               // AND - all enabled axes passed the treshold
                               // OR  - at least one axes passed the threshold
                               
-    bool     latch_interrupt; // latch the interrupt when true until the
+    bool     latch;           // latch the interrupt when true until the
                               // interrupt source has been read
                               
-    uint8_t  duration;        // duration in measurement steps an interrupt
-                              // condition has to be given before the
-                              // interrupt is generated
-                              
-    bool     wait_enabled;    // when true, duration is also used when interrupt
+    uint8_t  duration;        // duration in 1/ODR an interrupt condition has
+                              // to be given before the interrupt is generated
+
+    bool     wait;            // when true, duration is also used when interrupt
                               // condition in no longer given before interrupt
                               // signal is reset
                               
@@ -149,16 +148,16 @@ typedef struct {
  */
 typedef struct {
 
-    bool    active;     // true - one ore more have been generated
+    bool    x_low :1;     // true - x low event occured
+    bool    x_high:1;     // true - x high event occured
+
+    bool    y_low :1;     // true - z low event occured
+    bool    y_high:1;     // true - z high event occured
+
+    bool    z_low :1;     // true - z low event occured
+    bool    z_high:1;     // true - z high event occured
     
-    bool    x_low;      // true - x low event occured
-    bool    x_high;     // true - x high event occured
-
-    bool    y_low;      // true - z low event occured
-    bool    y_high;     // true - z high event occured
-
-    bool    z_low;      // true - z low event occured
-    bool    z_high;     // true - z high event occured
+    bool    active:1;     // true - one ore more have been generated
     
 } l3gd20h_int1_source_t;
 
@@ -205,7 +204,7 @@ typedef enum {
  */
 typedef enum {
 
-    l3gd20h_push_pull,
+    l3gd20h_push_pull = 0,
     l3gd20h_open_drain
 
 } l3gd20h_signal_type_t;
@@ -252,10 +251,10 @@ typedef l3gd20h_float_data_t l3gd20h_float_data_fifo_t[32];
  */
 typedef enum {
 
-    l3gd20h_normal = 0,
-    l3gd20h_reference,
-    l3gd20h_normal_x,
-    l3gd20h_autoreset
+    l3gd20h_hpf_normal = 0,
+    l3gd20h_hpf_reference,
+    l3gd20h_hpf_normal_x,
+    l3gd20h_hpf_autoreset
 
 } l3gd20h_hpf_mode_t;
 

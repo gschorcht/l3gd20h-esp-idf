@@ -44,8 +44,10 @@
  */
 
 // use following constants to define the example mode
-// #define INT_USED
 // #define SPI_USED
+#define INT1_USED
+#define INT2_USED
+#define FIFO_MODE
 
 #include <string.h>
 
@@ -135,7 +137,40 @@
 
 static l3gd20h_sensor_t* sensor;
 
-#ifdef INT_USED
+/**
+ * Common function that is used to get sensor data.
+ */
+void read_data (void)
+{
+    #ifdef FIFO_MODE
+    
+    l3gd20h_float_data_fifo_t  data;
+
+    if (l3gd20h_new_data (sensor))
+    {
+        uint8_t num = l3gd20h_get_float_data_fifo (sensor, data);
+        printf("%.3f L3GD20H num=%d\n", (double)sdk_system_get_time()*1e-3, num);
+        for (int i = 0; i < num; i++)
+            // max. full scale is +-2000 dps and max. sensitivity is 1 mdps, i.e. 7 digits
+            printf("%.3f L3GD20H (xyz)[dps]: %+9.3f %+9.3f  %+9.3f\n",
+                   (double)sdk_system_get_time()*1e-3, data[i].x, data[i].y, data[i].z);
+    }
+    
+    #else
+    
+    l3gd20h_float_data_t  data;
+
+    while (l3gd20h_new_data (sensor) &&
+           l3gd20h_get_float_data (sensor, &data))
+        // max. full scale is +-2000 dps and max. sensitivity is 1 mdps, i.e. 7 digits
+        printf("%.3f L3GD20H (xyz)[dps]: %+9.3f %+9.3f  %+9.3f\n",
+               (double)sdk_system_get_time()*1e-3, data.x, data.y, data.z);
+               
+    #endif // FIFO_MODE
+}
+
+
+#if defined(INT1_USED) || defined(INT2_USED)
 /**
  * In this case, axes movement wake up interrupt *INT1*  and data ready
  * interrupt *INT2* are used. While data ready interrupt *INT2* is generated
@@ -165,33 +200,23 @@ void user_task_interrupt (void *pvParameters)
             if (gpio_num == INT1_PIN)
             {
                 l3gd20h_int1_source_t source;
-                l3gd20h_float_data_t  data;
 
-                // get interrupt source 
+                // get the source of the interrupt source and reset INT1 signal
                 l3gd20h_get_int1_source (sensor, &source);
 
                 // if data ready interrupt, get the results and do something with them
-                if (source.active &&
-                    l3gd20h_get_float_data (sensor, &data))
-                    printf("%.3f L3GD20H Sensor INT1: x=%f y=%f z=%f\n",
-                           (double)sdk_system_get_time()*1e-3, 
-                           data.x, data.y, data.z);
+                if (source.active)
+                    read_data ();
             }
             else if (gpio_num == INT2_PIN)
             {
                 l3gd20h_int2_source_t source;
-                l3gd20h_float_data_t  data;
 
                 // get interrupt source 
                 l3gd20h_get_int2_source (sensor, &source);
 
                 // if data ready interrupt, get the results and do something with them
-                if (source.data_ready &&
-                    l3gd20h_new_data (sensor) &&
-                    l3gd20h_get_float_data (sensor, &data))
-                    printf("%.3f L3GD20H Sensor INT2: x=%f y=%f z=%f\n",
-                           (double)sdk_system_get_time()*1e-3, 
-                           data.x, data.y, data.z);
+                read_data();
             }
         }
     }
@@ -223,16 +248,11 @@ void user_task_periodic(void *pvParameters)
     
     while (1)
     {
-        l3gd20h_float_data_t  data;
-
-        // get the results and do something with them
-        if (l3gd20h_new_data (sensor) &&
-            l3gd20h_get_float_data (sensor, &data))
-            printf("%.3f L3GD20H Sensor: x=%f y=%f z=%f\n",
-                   (double)sdk_system_get_time()*1e-3, data.x, data.y, data.z);
-
+        // read sensor data
+        read_data ();
+        
         // passive waiting until 1 second is over
-        vTaskDelay(10);
+        vTaskDelay(100);
     }
 }
 
@@ -284,15 +304,14 @@ void user_init(void)
     
     if (sensor)
     {
-        // start periodic measurement for all three axes
-        l3gd20h_set_mode (sensor, l3gd20h_normal_odr_12_5, 0, true, true, true);
-
-        #if !defined(INT_USED)
+        // --- PLATFORM DEPENDENT PART ----
+        
+        #if !defined(INT1_USED) && !defined(INT2_USED)
 
         // create a user task that fetches data from sensor periodically
         xTaskCreate(user_task_periodic, "user_task_periodic", TASK_STACK_DEPTH, NULL, 2, NULL);
 
-        #else // INT_USED
+        #else // INT1_USED || INT2_USED
 
         // create a task that is triggered only in case of interrupts to fetch the data
         xTaskCreate(user_task_interrupt, "user_task_interrupt", TASK_STACK_DEPTH, NULL, 2, NULL);
@@ -322,35 +341,72 @@ void user_init(void)
         gpio_set_interrupt(INT1_PIN, GPIO_INTTYPE_EDGE_POS, int_signal_handler);
         gpio_set_interrupt(INT2_PIN, GPIO_INTTYPE_EDGE_POS, int_signal_handler);
 
-        #endif
-
-        // enable data ready interrupt signal *INT2*
-        l3gd20h_enable_int2 (sensor, l3gd20h_data_ready, true);
-
-        /*
-        l3gd20h_config_hpf (sensor, l3gd20h_normal, 0, 0);
-        l3gd20h_select_output_filter (sensor, l3gd20h_only_hpf);
+        #endif  // ESP_PLATFORM 
         
+        #endif  // !defined(INT1_USED) && !defined(INT2_USED)
+        
+        // -- SENSOR CONFIGURATION PART ---
+
+        // Interrupt configuration has to be done before the sensor is set
+        // into measurement mode
+
+        // set polarity of INT signals if necessary
+        // l3gd20h_config_int_signals (dev, l3gd20h_high_active, l3gd20h_push_pull);
+
+        #ifdef INT1_USED
+        // enable event interrupts
         l3gd20h_int1_config_t int1_config;
-
+    
         l3gd20h_get_int1_config (sensor, &int1_config);
-        
+    
         int1_config.x_high_enabled = true;
-        int1_config.x_threshold = 13374;  // 100 dps at 245 dps scale
         int1_config.y_high_enabled = true;
-        int1_config.y_threshold = 13374;  // 100 dps at 245 dps scale
         int1_config.z_high_enabled = true;
-        int1_config.z_threshold = 13374;  // 100 dps at 245 dps scale
-        int1_config.latch_interrupt = true;
-        int1_config.and_combination = false;
-        int1_config.filter = l3gd20h_only_hpf;
-        
+        int1_config.x_low_enabled  = false;
+        int1_config.y_low_enabled  = false;
+        int1_config.z_low_enabled  = false;
+        int1_config.x_threshold = 1000;
+        int1_config.y_threshold = 1000;
+        int1_config.z_threshold = 1000;
+    
+        int1_config.filter = l3gd20h_hpf_only;
+        int1_config.and_or = false;
+        int1_config.duration = 0;
+        int1_config.latch = true;
+    
         l3gd20h_set_int1_config (sensor, &int1_config);
-        */
+        #endif // INT1_USED
+        
+        #ifdef INT2_USED
+        // enable data ready (DRDY) and FIFO interrupt signal *INT2*
+        // NOTE: DRDY and FIFO interrupts must not be enabled at the same time
+        #ifdef FIFO_MODE
+        l3gd20h_enable_int2 (sensor, l3gd20h_fifo_overrun, true);
+        //l3gd20h_enable_int2 (sensor, l3gd20h_fifo_threshold, true);
+        #else
+        l3gd20h_enable_int2 (sensor, l3gd20h_data_ready, true);
         #endif
+        
+        #endif // INT2_USED
+
+        #ifdef FIFO_MODE
+        // clear FIFO and activate FIFO mode if needed
+        l3gd20h_set_fifo_mode (sensor, l3gd20h_bypass, 0);
+        l3gd20h_set_fifo_mode (sensor, l3gd20h_stream, 10);
+        #endif
+        
+        // select LPF/HPF, configure HPF and reset the reference by dummy read
+        l3gd20h_select_output_filter (sensor, l3gd20h_hpf_only);
+        l3gd20h_config_hpf (sensor, l3gd20h_hpf_normal, 0);
+        l3gd20h_get_hpf_ref (sensor);
+
+        // LAST STEP: Finally set scale and sensor mode to start measurements
+        l3gd20h_set_scale(sensor, l3gd20h_scale_245dps);
+        l3gd20h_set_mode (sensor, l3gd20h_normal_odr_12_5, 3, true, true, true);
 
         vTaskDelay (20);
-        
+
+        // -- SENSOR CONFIGURATION PART ---
     }
 }
 

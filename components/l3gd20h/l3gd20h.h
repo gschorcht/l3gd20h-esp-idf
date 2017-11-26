@@ -99,6 +99,9 @@
 #define L3GD20H_SEL_OUT_FILTER_FAILED      (11 << 8)
 #define L3GD20H_CONFIG_HPF_FAILED          (12 << 8)
 #define L3GD20H_ENABLE_HPF_FAILED          (13 << 8)
+#define L3GD20H_SENSOR_IN_BYPASS_MODE      (14 << 8)
+#define L3GD20H_SENSOR_IN_FIFO_MODE        (15 << 8)
+#define LG3GD20H_ODR_TOO_HIGH              (16 << 8)
 
 #if defined(ESP_PLATFORM) || defined(__linux__)
 #include "l3gd20h_types.h"
@@ -117,7 +120,7 @@ extern "C"
 
 
 /**
- * @brief    Initialize the sensor
+ * @brief   Initialize the sensor
  *
  * Sensor is soft reset and put into sleep mode. All registers are reset to 
  * default values.
@@ -131,7 +134,7 @@ l3gd20h_sensor_t* l3gd20h_init_sensor (uint8_t bus, uint8_t addr, uint8_t cs);
 
 
 /**
- * @brief    Set sensor mode
+ * @brief   Set sensor mode
  *
  * @param   dev     pointer to the sensor device data structure
  * @param   mode    sensor mode with certain output data rate
@@ -146,7 +149,7 @@ bool l3gd20h_set_mode (l3gd20h_sensor_t* dev, l3gd20h_mode_t mode, uint8_t bw,
                        
 
 /**
- * @brief    Set scale (full range range)
+ * @brief   Set scale (full range range)
  *
  * @param   dev     pointer to the sensor device data structure
  * @param   scale   range setting
@@ -160,10 +163,11 @@ bool l3gd20h_set_scale (l3gd20h_sensor_t* dev, l3gd20h_scale_t sens);
  *
  * @param   dev     pointer to the sensor device data structure
  * @param   mode    FIFO mode
+ * @param   thresh  FIFO watermark (ignored in bypass mode)
  * @return          true on success, false on error
  */
 bool l3gd20h_set_fifo_mode (l3gd20h_sensor_t* dev, 
-                            l3gd20h_fifo_mode_t mode);
+                            l3gd20h_fifo_mode_t mode, uint8_t thresh);
                             
 
 /**
@@ -181,7 +185,7 @@ bool l3gd20h_select_output_filter (l3gd20h_sensor_t* dev,
 
 
 /**
- * @brief    Test whether new sets of data are available
+ * @brief   Test whether new sets of data are available
  *
  * @param   dev     pointer to the sensor device data structure
  * @return          true on new data, otherwise false
@@ -190,10 +194,10 @@ bool l3gd20h_new_data (l3gd20h_sensor_t* dev);
 
 
 /**
- * @brief    Get one set of output values in degree
+ * @brief   Get one sample of floating point sensor data (unit degree)
  *
- * In the bypass mode, it returns the last measured value set. In any FIFO
- * mode, however, it returns the oldest (first) value set in the FIFO.
+ * Function works only in bypass mode and fails in FIFO modes. In FIFO modes,
+ * function *l3gd20h_get_float_data_fifo* has to be used instead to get data.
  *
  * @param   dev     pointer to the sensor device data structure
  * @param   data    pointer to float data structure filled with values
@@ -204,9 +208,9 @@ bool l3gd20h_get_float_data (l3gd20h_sensor_t* dev,
 
 
 /**
- * @brief    Get all sets of output values in degree from the FIFO
+ * @brief   Get all samples of sensor data stored in the FIFO (unit degree)
  *
- * In bypass mode, it returns exactly one value set.
+ * In bypass mode, it returns only one sensor data sample.
  *
  * @param   dev     pointer to the sensor device data structure
  * @param   data    array of 32 float data structures
@@ -217,10 +221,10 @@ uint8_t l3gd20h_get_float_data_fifo (l3gd20h_sensor_t* dev,
 
 
 /**
- * @brief    Get one set of raw output data as 16 bit two's complements
+ * @brief   Get one sample of raw sensor data as 16 bit two's complements
  *
- * In the bypass mode, it returns the last measured value set. In any FIFO
- * mode, however, it returns the oldest (first) value set in the FIFO.
+ * Function works only in bypass mode and fails in FIFO modes. In FIFO modes,
+ * function *l3gd20h_get_raw_data_fifo* has to be used instead to get data.
  *
  * @param   dev     pointer to the sensor device data structure
  * @param   raw     pointer to raw data structure filled with values
@@ -231,9 +235,9 @@ bool l3gd20h_get_raw_data (l3gd20h_sensor_t* dev,
 
 
 /**
- * @brief    Get all sets of raw output data from the FIFO
+ * @brief   Get all samples of raw sensor data stored in the FIFO
  *
- * In bypass mode, it returns exactly one raw data set.
+ * In bypass mode, it returns only one raw data sample.
  *
  * @param   dev     pointer to the sensor device data structure
  * @param   raw     array of 32 raw data structures
