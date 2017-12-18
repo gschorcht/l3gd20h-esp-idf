@@ -122,8 +122,8 @@ extern "C"
 /**
  * @brief   Initialize the sensor
  *
- * Sensor is soft reset and put into sleep mode. All registers are reset to 
- * default values.
+ * Reset the sensor and switch to power down mode. All registers are reset to 
+ * default values. FIFO is cleared.
  *
  * @param   bus     I2C or SPI bus at which L3GD20H sensor is connected
  * @param   addr    I2C addr of the L3GD20H sensor, 0 for using SPI
@@ -208,7 +208,7 @@ bool l3gd20h_get_float_data (l3gd20h_sensor_t* dev,
 
 
 /**
- * @brief   Get all samples of sensor data stored in the FIFO (unit degree)
+ * @brief   Get all samples of sensor data stored in the FIFO (unit dps)
  *
  * In bypass mode, it returns only one sensor data sample.
  *
@@ -372,6 +372,42 @@ int8_t l3gd20h_get_hpf_ref (l3gd20h_sensor_t* dev);
  */
 int8_t l3gd20h_get_temperature (l3gd20h_sensor_t* dev);
 
+
+// ---- Low level interface functions -----------------------------
+
+/**
+ * @brief   Direct write to register
+ *
+ * PLEASE NOTE: This function should only be used to do something special that
+ * is not covered by the high level interface AND if you exactly know what you
+ * do and what effects it might have. Please be aware that it might affect the
+ * high level interface.
+ *
+ * @param   dev      pointer to the sensor device data structure
+ * @param   reg      address of the first register to be changed
+ * @param   data     pointer to the data to be written to the register
+ * @param   len      number of bytes to be written to the register
+ * @return           true on success, false on error
+ */
+bool l3gd20h_write_reg (l3gd20h_sensor_t* dev, 
+                        uint8_t reg, uint8_t *data, uint16_t len);
+
+/**
+ * @brief   Direct read from register
+ *
+ * PLEASE NOTE: This function should only be used to do something special that
+ * is not covered by the high level interface AND if you exactly know what you
+ * do and what effects it might have. Please be aware that it might affect the
+ * high level interface.
+ *
+ * @param   dev      pointer to the sensor device data structure
+ * @param   reg      address of the first register to be read
+ * @param   data     pointer to the data to be read from the register
+ * @param   len      number of bytes to be read from the register
+ * @return           true on success, false on error
+ */
+bool l3gd20h_read_reg (l3gd20h_sensor_t* dev, 
+                       uint8_t reg, uint8_t *data, uint16_t len);
 
 #ifdef __cplusplus
 }

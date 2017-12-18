@@ -195,8 +195,6 @@
 static bool    l3gd20h_reset       (l3gd20h_sensor_t* dev);
 static bool    l3gd20h_is_available(l3gd20h_sensor_t* dev);
 
-static bool    l3gd20h_read_reg    (l3gd20h_sensor_t* dev, uint8_t reg, uint8_t *data, uint16_t len);
-static bool    l3gd20h_write_reg   (l3gd20h_sensor_t* dev, uint8_t reg, uint8_t *data, uint16_t len);
 static bool    l3gd20h_update_reg  (l3gd20h_sensor_t* dev, uint8_t reg, uint8_t mask, uint8_t  val);
 
 static uint8_t l3gd20h_get_reg_bit (uint8_t  byte, uint8_t mask);
@@ -319,7 +317,7 @@ bool l3gd20h_set_mode (l3gd20h_sensor_t* dev, l3gd20h_mode_t mode, uint8_t bw,
    
         // if sensor is in power mode it takes at least 100 ms to start in another mode
         if (!l3gd20h_get_reg_bit (reg1, L3GD20H_POWER_MODE))
-            vTaskDelay (20);
+            vTaskDelay (200/portTICK_PERIOD_MS);
             
         if (mode >= l3gd20h_normal_odr_100)
         {
@@ -896,7 +894,7 @@ static bool l3gd20h_reset (l3gd20h_sensor_t* dev)
     if (!l3gd20h_update_reg (dev, L3GD20H_REG_LOW_ODR, L3GD20H_SW_RESET, 1))
         return false;
         
-    vTaskDelay(10);
+    vTaskDelay(100/portTICK_PERIOD_MS);
 
     uint8_t reg[6] = { 0 };
     
@@ -933,7 +931,7 @@ static bool l3gd20h_update_reg(l3gd20h_sensor_t* dev, uint8_t reg, uint8_t mask,
     return true;
 }
 
-static bool l3gd20h_read_reg(l3gd20h_sensor_t* dev, uint8_t reg, uint8_t *data, uint16_t len)
+bool l3gd20h_read_reg(l3gd20h_sensor_t* dev, uint8_t reg, uint8_t *data, uint16_t len)
 {
     if (!dev || !data) return false;
 
@@ -942,7 +940,7 @@ static bool l3gd20h_read_reg(l3gd20h_sensor_t* dev, uint8_t reg, uint8_t *data, 
 }
 
 
-static bool l3gd20h_write_reg(l3gd20h_sensor_t* dev, uint8_t reg, uint8_t *data, uint16_t len)
+bool l3gd20h_write_reg(l3gd20h_sensor_t* dev, uint8_t reg, uint8_t *data, uint16_t len)
 {
     if (!dev || !data) return false;
 
