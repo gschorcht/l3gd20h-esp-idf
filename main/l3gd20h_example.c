@@ -11,7 +11,7 @@
  *         |          GPIO 5 (SCL)   ------> SCL      |
  *         |          GPIO 4 (SDA)   ------- SDA      |
  *         |          GPIO 13        <------ INT1     |
- *         |          GPIO 12        <------ INT2/DRDY|
+ *         |          GPIO 12        <------ DRDY/INT2|
  *         +-------------------------+     +----------+
  *
  *         +-------------------------+     +----------+
@@ -19,7 +19,7 @@
  *         |          GPIO 16 (SCL)  >-----> SCL      |
  *         |          GPIO 17 (SDA)  ------- SDA      |
  *         |          GPIO 22        <------ INT1     |
- *         |          GPIO 23        <------ INT2/DRDY|
+ *         |          GPIO 23        <------ DRDY/INT2|
  *         +-------------------------+     +----------+
  *
  *   SPI   +-------------------------+     +----------+
@@ -29,7 +29,7 @@
  *         |          GPIO 12 (MISO) <------ SDO      |
  *         |          GPIO 2  (CS)   ------> CS       |
  *         |          GPIO 5         <------ INT1     |
- *         |          GPIO 4         <------ INT2/DRDY|
+ *         |          GPIO 4         <------ DRDY/INT2|
  *         +-------------------------+     +----------+
 
  *         +-------------------------+     +----------+
@@ -39,15 +39,19 @@
  *         |          GPIO 18 (MISO) <------ SDO      |
  *         |          GPIO 19 (CS)   ------> CS       |
  *         |          GPIO 22        <------ INT1     |
- *         |          GPIO 23        <------ INT2/DRDY|
+ *         |          GPIO 23        <------ DRDY/INT2|
  *         +-------------------------+     +----------+
  */
 
 // use following constants to define the example mode
-// #define SPI_USED
-#define INT1_USED
-#define INT2_USED
-#define FIFO_MODE
+// #define SPI_USED    // if defined SPI is used, otherwise I2C
+   #define INT1_USED   // axes movement / wake up interrupts
+   #define INT2_USED   // data ready and FIFO status interrupts
+   #define FIFO_MODE   // multiple sample read mode
+
+#if defined(INT1_USED) || defined(INT2_USED)
+#define INT_USED
+#endif
 
 #include <string.h>
 
@@ -58,7 +62,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "driver/gpio.h"
 #include "esp8266_wrapper.h"
 
 #include "l3gd20h.h"
@@ -138,7 +141,7 @@
 static l3gd20h_sensor_t* sensor;
 
 /**
- * Common function that is used to get sensor data.
+ * Common function used to get sensor data.
  */
 void read_data (void)
 {
@@ -179,10 +182,9 @@ void read_data (void)
  * defined thresholds.
  *
  * When interrupts are used, the user has to define interrupt handlers that
- * fetches the data directly or triggers a task, that is waiting to fetch the
- * data. In this example, a task is defined which suspends itself
- * in each cycle to wait for fetching the data. The task is resumed by the
- * the interrupt handler.
+ * either fetches the data directly or triggers a task which is waiting to
+ * fetch the data. In this example, the interrupt handler sends an event to
+ * a waiting task to trigger the data gathering.
  */
 
 static QueueHandle_t gpio_evt_queue = NULL;
@@ -201,7 +203,7 @@ void user_task_interrupt (void *pvParameters)
             {
                 l3gd20h_int1_source_t source;
 
-                // get the source of the interrupt source and reset INT1 signal
+                // get the source of the interrupt and reset INT1 signal
                 l3gd20h_get_int1_source (sensor, &source);
 
                 // if data ready interrupt, get the results and do something with them
@@ -212,7 +214,7 @@ void user_task_interrupt (void *pvParameters)
             {
                 l3gd20h_int2_source_t source;
 
-                // get interrupt source 
+                // get the source of the interrupt
                 l3gd20h_get_int2_source (sensor, &source);
 
                 // if data ready interrupt, get the results and do something with them
@@ -222,15 +224,17 @@ void user_task_interrupt (void *pvParameters)
     }
 }
 
-// Interrupt handler which resumes user_task_interrupt on interrupt
+// Interrupt handler which resumes sends an event to the waiting user_task_interrupt
 
 #ifdef ESP_PLATFORM  // ESP32 (ESP-IDF)
 static void IRAM_ATTR int_signal_handler(void* arg)
 {
     uint32_t gpio = (uint32_t) arg;
+
 #else  // ESP8266 (esp-open-rtos)
 void int_signal_handler (uint8_t gpio)
 {
+
 #endif
     // send an event with GPIO to the interrupt user task
     xQueueSendFromISR(gpio_evt_queue, &gpio, NULL);
@@ -244,7 +248,7 @@ void int_signal_handler (uint8_t gpio)
 
 void user_task_periodic(void *pvParameters)
 {
-    vTaskDelay (10);
+    vTaskDelay (100/portTICK_PERIOD_MS);
     
     while (1)
     {
@@ -252,7 +256,7 @@ void user_task_periodic(void *pvParameters)
         read_data ();
         
         // passive waiting until 1 second is over
-        vTaskDelay(100);
+        vTaskDelay(1000/portTICK_PERIOD_MS);
     }
 }
 
@@ -278,33 +282,26 @@ void user_init(void)
     #ifdef SPI_USED
 
     // init the sensor connnected to SPI
-    #ifdef ESP_OPEN_RTOS
-    sensor = l3gd20h_init_sensor (SPI_BUS, 0, SPI_CS_GPIO);
-    #else
-    spi_bus_config_t spi_bus_cfg = {
-        .miso_io_num=SPI_MISO_GPIO,
-        .mosi_io_num=SPI_MOSI_GPIO,
-        .sclk_io_num=SPI_SCK_GPIO,
-        .quadwp_io_num=-1,
-        .quadhd_io_num=-1
-    };
-    if (spi_bus_initialize(SPI_BUS, &spi_bus_cfg, 1) == ESP_OK)
-        sensor = l3gd20h_init_sensor (SPI_BUS, 0, SPI_CS_GPIO);
+    #ifdef ESP_PLATFORM
+    spi_bus_init (SPI_BUS, SPI_SCK_GPIO, SPI_MISO_GPIO, SPI_MOSI_GPIO);
     #endif
-    
-    #else
+
+    // init the sensor connected to SPI_BUS with SPI_CS_GPIO as chip select.
+    sensor = l3gd20h_init_sensor (SPI_BUS, 0, SPI_CS_GPIO);
+
+    #else  // I2C
 
     // init all I2C bus interfaces at which L3GD20H sensors are connected
     i2c_init (I2C_BUS, I2C_SCL_PIN, I2C_SDA_PIN, I2C_FREQ);
     
-    // init the sensor with slave address L3GD20H_I2C_ADDRESS_2 connected I2C_BUS.
+    // init the sensor with slave address L3GD20H_I2C_ADDRESS_2 connected to I2C_BUS.
     sensor = l3gd20h_init_sensor (I2C_BUS, L3GD20H_I2C_ADDRESS_2, 0);
 
-    #endif
+    #endif  // SPI_USED
     
     if (sensor)
     {
-        // --- PLATFORM DEPENDENT PART ----
+        // --- SYSTEM CONFIGURATION PART ----
         
         #if !defined(INT1_USED) && !defined(INT2_USED)
 
@@ -319,30 +316,10 @@ void user_init(void)
         // create event queue
         gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
 
-        #ifdef ESP_PLATFORM  // ESP32 (ESP-IDF)
-        
-        // configure interupt pins for *INT1* and *INT2* signals
-        gpio_config_t gpio_cfg = {
-            .pin_bit_mask = ((uint64_t)(((uint64_t)1)<< INT1_PIN) | (((uint64_t)1)<< INT2_PIN)),
-            .mode = GPIO_MODE_INPUT,
-            .pull_down_en = true,
-            .intr_type = GPIO_INTR_POSEDGE
-        };
-        gpio_config(&gpio_cfg);
-
-        // set interrupt handler
-        gpio_install_isr_service(0);
-        gpio_isr_handler_add(INT1_PIN, int_signal_handler, (void*)INT1_PIN);
-        gpio_isr_handler_add(INT2_PIN, int_signal_handler, (void*)INT2_PIN);
-
-        #else  // ESP8266 (esp-open-rtos)
-
         // configure interupt pins for *INT1* and *INT2* signals and set the interrupt handler
         gpio_set_interrupt(INT1_PIN, GPIO_INTTYPE_EDGE_POS, int_signal_handler);
         gpio_set_interrupt(INT2_PIN, GPIO_INTTYPE_EDGE_POS, int_signal_handler);
 
-        #endif  // ESP_PLATFORM 
-        
         #endif  // !defined(INT1_USED) && !defined(INT2_USED)
         
         // -- SENSOR CONFIGURATION PART ---
@@ -382,7 +359,7 @@ void user_init(void)
         // NOTE: DRDY and FIFO interrupts must not be enabled at the same time
         #ifdef FIFO_MODE
         l3gd20h_enable_int2 (sensor, l3gd20h_fifo_overrun, true);
-        //l3gd20h_enable_int2 (sensor, l3gd20h_fifo_threshold, true);
+        l3gd20h_enable_int2 (sensor, l3gd20h_fifo_threshold, true);
         #else
         l3gd20h_enable_int2 (sensor, l3gd20h_data_ready, true);
         #endif
@@ -403,8 +380,6 @@ void user_init(void)
         // LAST STEP: Finally set scale and sensor mode to start measurements
         l3gd20h_set_scale(sensor, l3gd20h_scale_245dps);
         l3gd20h_set_mode (sensor, l3gd20h_normal_odr_12_5, 3, true, true, true);
-
-        vTaskDelay (20);
 
         // -- SENSOR CONFIGURATION PART ---
     }
