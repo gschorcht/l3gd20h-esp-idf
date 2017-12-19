@@ -136,12 +136,12 @@ void user_task_periodic(void *pvParameters)
 ```
 
 **Please note:** 
-The functions ```l3gd20h_get_float_data``` and ```l3gd20h_get_raw_data``` always return the last available results. If these functions are called more frequently than measurements, some measurement results are retrieved multiple times. If these functions are called too rarely, some measurement results will be lost.
+The functions ```l3gd20h_get_float_data``` and ```l3gd20h_get_raw_data``` always return the last available results. If these functions are called more often than measurements are performed, some measurement results are retrieved multiple times. If these functions are called too rarely, some measurement results will be lost.
 
 ### Filters
 
 L3GD20H provides embedded low-pass as well as high-pass filtering capabilities to improve measurement results.
-It is possible to independently apply the filters on the output data and/or on the data used for selective axes movement / wake up interrupt generation (see below) separately. Please refer the [datashet](http://www.st.com/resource/en/datasheet/l3gd20.pdf) or [application note](http://www.st.com/resource/en/application_note/dm00119036.pdf) for more details.
+It is possible to independently apply the filters on the output data and/or on the data used for selective axes movement / wake up interrupt generation (see below) separately. Please refer the [datasheet](http://www.st.com/resource/en/datasheet/l3gd20.pdf) or [application note](http://www.st.com/resource/en/application_note/dm00119036.pdf) for more details.
 
 The filters applied to the output data are selected with function ```l3gd20h_select_output_filter```.  Following selections are possible:
 
@@ -182,7 +182,7 @@ l3gd20h_get_hpf_ref (sensor);
 
 ### FIFO
 
-In order to limit the rate at which the host process has to fetch data, especially at high output data rates, the L3GD20H embeds a first-in first-out buffer (FIFO). The FIFO buffer can work in seven different modes and is able to store up to 32 angular rate samples. Please refer the [datashet](http://www.st.com/resource/en/datasheet/l3gd20.pdf) or [application note](http://www.st.com/resource/en/application_note/dm00119036.pdf) for more details.
+In order to limit the rate at which the host processor has to fetch the data, the L3GD20H embeds a first-in first-out buffer (FIFO). This is in particular helpful at high output data rates. The FIFO buffer can work in seven different modes and is able to store up to 32 angular rate samples. Please refer the [datasheet](http://www.st.com/resource/en/datasheet/l3gd20.pdf) or [application note](http://www.st.com/resource/en/application_note/dm00119036.pdf) for more details.
 
 Driver symbol | FIFO mode
 --------------|-------------------------
@@ -194,7 +194,7 @@ l3gd20h_bypass_to_stream | Bypass-to-Stream mode
 l3gd20h_dynamic_stream | Dynamic Stream mode
 l3gd20h_bypass_to_fifo | Bypass to FIFO mode
 
-The FIFO mode can be set using function ```l3gd20h_set_fifo_mode```. This function takes two parameters, the FIFO mode and a threshold value which defines a watermark level. When the FIFO content exceeds this level, a watermark flag is set and an interrupt can be generated. They can be used to gather a number axes angular rates samples before the data are fetched from the sensor as a single read operation.
+The FIFO mode can be set using function ```l3gd20h_set_fifo_mode```. This function takes two parameters, the FIFO mode and a threshold value which defines a watermark level. When the FIFO content exceeds this level, a watermark flag is set and an interrupt can be generated. They can be used to gather a minimum number of axes angular rate samples with the sensor before the data are fetched as a single read operation from the sensor.
 
 ```
 ...
@@ -263,7 +263,7 @@ Each of these interrupt sources can be enabled or disabled separately with funct
 l3gd20h_enable_int2 (sensor, l3gd20h_data_ready, true);
 ```
 
-Whenever the interrupt signal ```DRDY/INT2``` is generated, function ```l3gd20h_get_int2_source``` can be used to determine the source of the interrupt signal. This function returns a data structure of type ```l3gd20h_int2_source_t``` that contain a boolean member for each source that can be tested for true.
+Whenever the interrupt signal ```DRDY/INT2``` is generated, function ```l3gd20h_get_int2_source``` can be used to determine the source of the interrupt signal. This function returns a data structure of type ```l3gd20h_int2_source_t``` that contains a boolean member for each source that can be tested for true.
 
 ```
 void int2_handler ()
@@ -329,14 +329,14 @@ int1_config.wait = false;
 l3gd20h_set_int1_config (sensor, &int1_config);
 ```
 
-Furthermore, with this data structure is is also configured
+Furthermore, with this data structure it is also configured
 
 - whether the interrupt signal should latched until the interrupt source is read,
 - which filters are applied to data used for interrupt generation,
 - which time in 1/ODR an interrupt condition has to be given before the interrupt is generated, and
 - whether this time is also used when interrupt condition in no longer given before interrupt signal is reset.
 
-As with data ready and FIFO interrupts, function ```l3gd20h_get_int1_source``` can be used to determine the source of the interrupt signal whenever the interrupt signal ```INT1``` is generated. This function returns a data structure of type ```l3gd20h_int1_source_t``` that contain a boolean member for each source that can be tested for true.
+As with data ready and FIFO interrupts, function ```l3gd20h_get_int1_source``` can be used to determine the source of the interrupt signal whenever it is generated. This function returns a data structure of type ```l3gd20h_int1_source_t``` that contain a boolean member for each source that can be tested for true.
 
 ```
 void int1_handler ()
@@ -416,7 +416,11 @@ Driver symbol | Meaning
 l3gd20h_push_pull  | Interrupt output is pushed/pulled
 l3gd20h_open_drain | Interrupt output is open-drain
 
-#### Low level functions
+### Temperature sensor
+
+The L3GD20H contains a temperature sensor. Function ```l3gd20h_get_temperature``` can be used to get the temperature. The temperature is given as 8-bit signed integer values in 2’s complement.
+
+### Low level functions
 
 The L3GD20H is a very complex and flexible sensor with a lot of features. It can be used for a big number of different use cases. Since it is quite impossible to implement a high level interface which is generic enough to cover all the functionality of the sensor for all different use cases, there are two low level interface functions that allow direct read and write access to the registers of the sensor.
 
@@ -437,14 +441,14 @@ First, the hardware configuration has to be established.
 Following figure shows a possible hardware configuration for ESP8266 and ESP32 if I2C interface is used to connect the sensor.
 
 ```
-  +-----------------+    +-----------+              +-----------------+    +-----------+
-  | ESP8266         |    | L3GD20H   |              | ESP32           |    | L3GD20H   |
-  |                 |    |           |              |                 |    |           |
-  |   GPIO 5 (SCL)  >----> SCL       |              |   GPIO 16 (SCL) >----> SCL       |
-  |   GPIO 4 (SDA)  ------ SDA       |              |   GPIO 17 (SDA) ------ SDA       |
-  |   GPIO 13       <----- INT1      |              |   GPIO 22       <----- INT1      |
-  |   GPIO 12       <----- DRDY/INT2 |              |   GPIO 23       <----- DRDY/INT2 |
-  +-----------------+    +-----------+              +-----------------+    +-----------+
+  +-----------------+     +----------+              +-----------------+     +----------+
+  | ESP8266         |     | L3GD20H  |              | ESP32           |     | L3GD20H  |
+  |                 |     |          |              |                 |     |          |
+  |   GPIO 5 (SCL)  >-----> SCL      |              |   GPIO 16 (SCL) >-----> SCL      |
+  |   GPIO 4 (SDA)  ------- SDA      |              |   GPIO 17 (SDA) ------- SDA      |
+  |   GPIO 13       <------ INT1     |              |   GPIO 22       <------ INT1     |
+  |   GPIO 12       <------ DRDY/INT2|              |   GPIO 23       <------ DRDY/INT2|
+  +-----------------+     +----------+              +-----------------+     +----------+
 ```
 
 If SPI interface is used, configuration for ESP8266 and ESP32 could look like following.

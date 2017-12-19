@@ -154,7 +154,7 @@ void read_data (void)
         uint8_t num = l3gd20h_get_float_data_fifo (sensor, data);
         printf("%.3f L3GD20H num=%d\n", (double)sdk_system_get_time()*1e-3, num);
         for (int i = 0; i < num; i++)
-            // max. full scale is +-2000 dps and max. sensitivity is 1 mdps, i.e. 7 digits
+            // max. full scale is +-2000 dps and best sensitivity is 1 mdps, i.e. 7 digits
             printf("%.3f L3GD20H (xyz)[dps]: %+9.3f %+9.3f  %+9.3f\n",
                    (double)sdk_system_get_time()*1e-3, data[i].x, data[i].y, data[i].z);
     }
@@ -165,7 +165,7 @@ void read_data (void)
 
     while (l3gd20h_new_data (sensor) &&
            l3gd20h_get_float_data (sensor, &data))
-        // max. full scale is +-2000 dps and max. sensitivity is 1 mdps, i.e. 7 digits
+        // max. full scale is +-2000 dps and best sensitivity is 1 mdps, i.e. 7 digits
         printf("%.3f L3GD20H (xyz)[dps]: %+9.3f %+9.3f  %+9.3f\n",
                (double)sdk_system_get_time()*1e-3, data.x, data.y, data.z);
                
@@ -363,7 +363,6 @@ void user_init(void)
         #else
         l3gd20h_enable_int2 (sensor, l3gd20h_data_ready, true);
         #endif
-        
         #endif // INT2_USED
 
         #ifdef FIFO_MODE
