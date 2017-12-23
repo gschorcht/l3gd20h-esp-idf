@@ -8,14 +8,14 @@
  *
  *   I2C
  *
- *   +---------------+   +----------+       +---------------+   +----------+
- *   | ESP8266       |   | L3GD20H  |       | ESP32         |   | L3GD20H  |
- *   |               |   |          |       |               |   |          |
- *   | GPIO 5 (SCL)  ----> SCL      |       | GPIO 16 (SCL) ----> SCL      |
- *   | GPIO 4 (SDA)  <---> SDA      |       | GPIO 17 (SDA) <---> SDA      |
- *   | GPIO 13       <---- INT1     |       | GPIO 22       <---- INT1     |
- *   | GPIO 12       <---- DRDY/INT2|       | GPIO 23       <---- DRDY/INT2|
- *   +---------------+   +----------+       +---------------+   +----------+
+ *   +-----------------+   +----------+
+ *   | ESP8266 / ESP32 |   | L3GD20H  |
+ *   |                 |   |          |
+ *   |   GPIO 14 (SCL) ----> SCL      |
+ *   |   GPIO 13 (SDA) <---> SDA      |
+ *   |   GPIO 5        <---- INT1     |
+ *   |   GPIO 4        <---- DRDY/INT2|
+ *   +-----------------+   +----------+
  *
  *   SPI   
  *
@@ -26,8 +26,8 @@
  *   | GPIO 13 (MOSI)----> SDI      |        | GPIO 17 (MOSI)----> SDI      |
  *   | GPIO 12 (MISO)<---- SDO      |        | GPIO 18 (MISO)<---- SDO      |
  *   | GPIO 2  (CS)  ----> CS       |        | GPIO 19 (CS)  ----> CS       |
- *   | GPIO 5        <---- INT1     |        | GPIO 22       <---- INT1     |
- *   | GPIO 4        <---- DRDY/INT2|        | GPIO 23       <---- DRDY/INT2|
+ *   | GPIO 5        <---- INT1     |        | GPIO 5        <---- INT1     |
+ *   | GPIO 4        <---- DRDY/INT2|        | GPIO 4        <---- DRDY/INT2|
  *   +---------------+    +---------+        +---------------+   +----------+
  */
 
@@ -60,16 +60,6 @@
 #define SPI_MISO_GPIO 18
 #define SPI_CS_GPIO   19
 
-// define I2C interfaces for L3GD20H sensors
-#define I2C_BUS       0
-#define I2C_SCL_PIN   16
-#define I2C_SDA_PIN   17
-#define I2C_FREQ      400000
-
-// define GPIOs for interrupt
-#define INT1_PIN      22
-#define INT2_PIN      23
-
 #else  // ESP8266 (esp-open-rtos)
 
 // user task stack depth
@@ -82,22 +72,17 @@
 #define SPI_MISO_GPIO 12
 #define SPI_CS_GPIO   2   // GPIO 15, the default CS of SPI bus 1, can't be used
 
+#endif  // ESP_PLATFORM
+
 // define I2C interfaces for L3GD20H sensors
 #define I2C_BUS       0
-#define I2C_SCL_PIN   5
-#define I2C_SDA_PIN   4
+#define I2C_SCL_PIN   14
+#define I2C_SDA_PIN   13
 #define I2C_FREQ      I2C_FREQ_100K
 
 // define GPIOs for interrupt
-#ifdef SPI_USED
 #define INT1_PIN      5
 #define INT2_PIN      4
-#else
-#define INT1_PIN      13
-#define INT2_PIN      12
-#endif  // SPI_USED
-
-#endif  // ESP_PLATFORM
 
 /* -- user tasks ---------------------------------------------- */
 
